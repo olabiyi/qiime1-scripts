@@ -1,0 +1,10 @@
+#! /bin/bash
+#$ -S /bin/bash
+#$ -q bioinfo.q
+#$ -V
+#$ -cwd
+#$ -N wash_sourceTracking
+#$ -pe shared 40
+
+# run sourceTracker
+Rscript /gpfs0/biores/users/gilloro/Biyi/SourceTracking/sourcetracker-1.0.1/sourcetracker_for_qiime.r -i /gpfs0/biores/users/gilloro/Biyi/community_analysis/fruit_wash/05.open_ref_otus/altered_mst_otu_table_filtered_biom.txt -m /gpfs0/biores/users/gilloro/Biyi/community_analysis/fruit_wash/00.mapping_file_validation/corrected/altered_mst_fruit_wash_mapping_corrected.txt -o /gpfs0/biores/users/gilloro/Biyi/community_analysis/fruit_wash/08.source_tracking/run5
