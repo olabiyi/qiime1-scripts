@@ -1,0 +1,31 @@
+#for multiple split library commamed without barcode
+split_libraries_fastq:phred_offset  33
+split_libraries_fastq:phred_quality_threshold 19
+split_libraries_fastq:barcode_type "not-barcoded"
+split_libraries_fastq:mapping_fps /fastspace/users/gilloro/Biyi/community_analysis/soil/00.mapping_file_validation/soil_protist_mapping_corrected.txt 
+
+#Identify chimeric sequences
+identify_chimeric_seqs:reference_seqs_fp /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta
+identify_chimeric_seqs:chimera_detection_method  usearch61
+identify_chimeric_seqs:non_chimeras_retention  intersection
+
+# For "core diversity" pipeline:
+beta_diversity:metrics      bray_curtis,unweighted_unifrac,weighted_unifrac
+alpha_diversity:metrics     chao1,observed_otus,observed_species,shannon,PD_whole_tree
+
+#pick_otus:otu_picking_method        sumaclust
+#pick_otus:refseqs_fp                /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta
+pick_otus:similarity                0.97
+
+#align sequences
+align_seqs:alignment_method         pynast
+align_seqs:template_fp              /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/core_alignment/core_alignment_SILVA128.fna
+
+#assign taxonomy
+assign_taxonomy:confidence          0.8
+assign_taxonomy:assignment_method   uclust
+assign_taxonomy:id_to_taxonomy_fp   /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/taxonomy/18S_only/97/consensus_taxonomy_7_levels.txt
+assign_taxonomy:reference_seqs_fp	/fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta
+
+#make otu table
+make_otu_table:mapping_fp	/fastspace/users/gilloro/Biyi/community_analysis/soil/00.mapping_file_validation/soil_protist_mapping_corrected.txt

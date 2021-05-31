@@ -1,0 +1,21 @@
+split_libraries_fastq:phred_offset  33
+
+# For "core diversity" pipeline:
+beta_diversity:metrics      bray_curtis,unweighted_unifrac,weighted_unifrac
+alpha_diversity:metrics     chao1,observed_otus,observed_species,shannon,PD_whole_tree
+
+
+
+pick_otus:otu_picking_method        uclust
+pick_otus:refseqs_fp                /usr/local/lib/python2.7/dist-packages/qiime_default_reference/gg_13_8_otus/rep_set/97_otus.fasta
+pick_otus:similarity                0.97
+
+
+align_seqs:alignment_method         pynast
+align_seqs:template_fp               /usr/local/lib/python2.7/dist-packages/qiime_default_reference/gg_13_8_otus/rep_set_aligned/85_otus.pynast.fasta
+
+assign_taxonomy:confidence          0.8
+assign_taxonomy:assignment_method   rdp
+
+
+

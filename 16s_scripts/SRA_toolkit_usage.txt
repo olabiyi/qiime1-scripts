@@ -1,0 +1,11 @@
+#downloading sequences from ncbi's sequence read archive using fasta-dumb from the SRA tool kit from the bin directorory of the unziped sra toolkit folder
+#downloading and installing teh SRA toolkit
+$wget "ftp://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-centos_linux64.tar.gz" #download the toolkit from ncbi
+$tar -xzf sratoolkit.current-centos_linux64.tar.gz #unzip the the downloaded 
+$set path = ( /fastspace/users/gilloro/Biyi/sratoolkit.2.8.2-1-centos_linux64/bin/ & path ) #add to path
+$rm -rf sratoolkit.current-centos_linux64.tar.gz #remove the gz file to save memory
+$cd sratoolkit.2.8.2-1-centos_linux64/bin/ #change to the bin directory of the toolkit 
+
+#the I parameter means Append read id after spot id as 'accession.spot.readid' on defline. --outdir is the path to the ouput directory where the reads will be downloaded
+#--gzip means to zip up the file just to save memory --split-files means Dump each read into separate file. Files will receive suffix corresponding to read number.
+./fastq-dump -I --outdir /fastspace/users/gilloro/Biyi/SourceTracking/lake_Garda/reads/ --gzip --split-files ERR2102638

@@ -1,0 +1,24 @@
+#for multiple split library commamed without barcode
+split_libraries_fastq:phred_offset  33
+split_libraries_fastq:phred_quality_threshold 19
+split_libraries_fastq:barcode_type "not-barcoded"
+split_libraries_fastq:mapping_fps /gpfs0/biores/users/gilloro/Biyi/community_analysis/soil/00.mapping_file_validation/combined/bacteria/corrected/soil_bacteria_mapping_corrected.txt
+
+
+# For "core diversity" pipeline:
+beta_diversity:metrics      bray_curtis,unweighted_unifrac,weighted_unifrac
+alpha_diversity:metrics     chao1,observed_otus,observed_species,shannon,PD_whole_tree
+
+pick_otus:similarity                0.97
+pick_otus:threads                   72
+
+align_seqs:alignment_method         pynast
+align_seqs:template_fp              /gpfs0/biores/users/gilloro/Biyi/SILVA_128_QIIME_release/core_alignment/core_alignment_SILVA128.fna
+
+assign_taxonomy:confidence          0.5
+assign_taxonomy:assignment_method   rdp
+assign_taxonomy:rdp_max_memory      50000
+assign_taxonomy:id_to_taxonomy_fp   /gpfs0/biores/users/gilloro/Biyi/SILVA_128_QIIME_release/taxonomy/16S_only/97/consensus_taxonomy_7_levels.txt
+assign_taxonomy:reference_seqs_fp       /gpfs0/biores/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_16S_only/97/97_otus_16S.fasta
+
+make_otu_table:mapping_fp       /gpfs0/biores/users/gilloro/Biyi/community_analysis/soil/00.mapping_file_validation/combined/bacteria/corrected/soil_bacteria_mapping_corrected.txt

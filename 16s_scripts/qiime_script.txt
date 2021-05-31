@@ -1,0 +1,523 @@
+########################## Getting things ready ###########################
+
+#install microbiome helper if you don't have it
+git clone https://github.com/LangilleLab/microbiome_helper.git
+
+#install perl's ForkManager if not already installed
+cpan Parallel::ForkManager
+
+#if you made your script in windows convert it to unix format using dos2unix command
+dos2unix /fastspace/users/gilloro/Biyi/pathogen_analysis/run_pear.pl
+
+#set the paths so the programs can be available
+#fastQC
+set path = (/fastspace/users/gilloro/Biyi/FastQC/ $path)
+export PATH=/fastspace/users/gilloro/Biyi/FastQC/:$PATH
+#Qiime
+set path = (/fastspace/bioinfo_apps/qiime/usr/local/bin/ $path) #csh
+export PATH=/fastspace/bioinfo_apps/qiime/usr/local/bin/:$PATH #bash
+#PEAR
+set path = (/fastspace/users/gilloro/Biyi/pear-0.9.11-linux-x86_64/bin/ $path)
+
+#blast
+set path = ( /fastspace/users/gilloro/Biyi/ncbi-blast-2.7.1+/bin/ $path )
+
+#microbiome helper (contains serious of useful scripts for microbiome analysis; specifical)
+set path = ( /fastspace/users/gilloro/Biyi/microbiome_helper/ $path )
+export PATH=/fastspace/users/gilloro/Biyi/microbiome_helper/:PATH
+
+#setting up QIIME and RDP on the cluster
+#first type bash to change to bash
+bash
+#create a temporary folder for QIIME
+mkdir /gpfs0/biores/users/$USER/.qiime_temp
+
+#second modify the environment for Qiime
+export PATH="/storage16/app/bioinfo/blast-2.2.22/bin:/fastspace/bioinfo_apps/cdbfasta:/fastspace/bioinfo_apps/microbiomeutil-r20110519/ChimeraSlayer:/fastspace/bioinfo_apps/qiime/usr/local/bin:/fastspace/bioinfo_apps/qiime/local/bin:/bin:/usr/bin" PYTHONPATH="/fastspace/bioinfo_apps/qiime/usr/local" HDF5_DIR="/fastspace/bioinfo_apps/qiime/local/hdf5" RDP_JAR_PATH="/fastspace/bioinfo_apps/qiime/local/rdp_classifier_2.2/rdp_classifier-2.2.jar" QIIME_CONFIG_FP="/fastspace/bioinfo_apps/qiime/qiime_config_biores"
+
+
+############################################################################################################################## 
+#move read files to one folder on Windows
+
+#method 1
+#move the contents of the folders containg the reads into the parent directory using windows command prompt
+for /r C:\path %i in (*) do @move "%i" "C:\path"
+#next step is the delete the empty folders then copy or move the reads into a folder on the cluster 
+
+#method 2
+#or move fromthe Moxterminal
+#afer you must have downloaded and installed mobaxTerm
+#change directory to the directory containg the sequences
+cd MyDocuments/programming/sequence_directory/
+#make a directory to store the reads/seqences together
+mkdir together
+#move the files to the 'together' diretory - 'ls -d */' list on the directories in the current directory
+for dir in $(ls -d */); do if [ $dir == together/ ]; then continue; fi;   mv $dir* together/; done
+
+##### Analysis Proper #############
+ 
+#validate your qiime mapping file
+validate_mapping_file.py -m 00.mapping_file_validation/soilType_exp/soilType_protist_mapping.txt -o 00.mapping_file_validation/soilType_exp/
+
+
+validate_mapping_file.py -m 00.mapping_file_validation/bacteria/mst_water_bac_mapping.txt  -o 00.mapping_file_validation/bacteria/corrected/
+#count the number of sequence in a fastq file
+>grep -c "@" Biyi/community_analysis/soil/files/Olabiyi296-SA-31_S49_L001_R1_001.fastq #unfiltered reads
+>grep "@" Biyi/community_analysis/soil/02.join/SA.31_.assembled.fastq #reads assembled after initial quality filtering using PEARL
+calculate the percentage of the reads assembled by  
+
+#get the length of sequences in a fastq file 'casper.fastq'
+awk 'NR%4 == 2 {lengths[length($0)]++} END {for (l in lengths) {print l, lengths[l]}}' casper.fastq
+
+#quality testing with fastQC
+chmod +x Biyi/FastQC/fastqc  #make the fastQC script executable
+fastqc --outdir Biyi/community_analysis/soil/01.QC/ Biyi/community_analysis/soil/files/*
+
+#join reads using pear on the cluster
+#/fastspace/users/gilloro/Biyi/pear-0.9.11-linux-x86_64/bin/pear -f files/Olabiyi296-SB-31_S49_L001_R1_001.fastq -r files/Olabiyi296-SB-31_S49_L001_R2_001.fastq -o 02.join/SB.31_ -m 480 -n 300 -t 300 -q 20 
+run_pear.pl -o stitched_reads files/*
+
+#cleaned the folder containg the assembeled reads
+rm -rf joined_child_gut/*.unassembled* joined_child_gut/*discarded*
+
+#quality check on joined reads
+fastqc --outdir 01.QC files/joined
+
+#concatenate the joined sequences in one seqs.fna file   -w flag for debugging
+#for bacteria
+multiple_split_libraries_fastq.py -i bac_assembeled/ -o 03.demultiplexed/bacteria_demultiplexed/  -p fastspace/users/gilloro/Biyi/bacteria_parameters.txt 
+#for protist
+multiple_split_libraries_fastq.py -i protist_forward/ -o 03.demultiplexed/protozoa_demultiplexed/ -p /fastspace/users/gilloro/Biyi/protozoa_parameters.txt
+
+#get the statistics for split libray log - need to install magrit r top use the script
+>Rscript /gpfs0/biores/users/gilloro/Biyi/split_library_log_parser/parse_split_library_log.R --input bacteria_demultiplexed/split_library_log.txt --output bacteria_demultiplexed/split_library_log.tsv
+
+#get the azverage number of sequences for each matix tested - this example is for water protists
+grep "WA.*" 03.demultiplexed/protozoa_demultiplexed/split_library_log.tsv | awk -F"\t" '{sum += $9}END{print sum/NR}'
+
+#count the sequences in the seqs.fna file
+#count.py -i seqs.fna #count all the sequences after split_labrary's quality filtering and concatenation
+count_seqs.py -i "bac_assembled/*" #count the sequences in all the assembled bacteria fastq files 586053
+
+#######################################################################
+#remove chimeras
+#a.using usearch 61
+#.1 identify themeric sequences
+#for bacteria
+identify_chimeric_seqs.py -m usearch61 -i 03.demultiplexed/bacteria_demultiplexed/seqs.fna  -r /fastspace/users/gilloro/Biyi/gold.fa -o bac_usearch61_chimera_checking/ --non_chimeras_retention union
+
+#.2 remove the chimeric sequences
+#BACTERIA
+filter_fasta.py -f 03.demultiplexed/bacteria_demultiplexed/seqs.fna  -o 03.demultiplexed/bacteria_demultiplexed/non_chimeric_seqs.fasta -s bac_usearch61_chimera_checking/chimeras.txt -n
+
+#PROTIST
+filter_fasta.py -f 03.demultiplexed/protozoa_demultiplexed/seqs.fna  -o 03.demultiplexed/protozoa_demultiplexed/non_chimeric_seqs.fasta -s protist_usearch61_chimera_checking/chimeras.txt  -n
+###########################################################
+
+
+###################################################  remove chimeras script ###############################################
+#chimera checking with usearch61
+
+#split the seqs.fna file into per sample fna file
+split_sequence_file_on_sample_ids.py -i 03.demultiplexed/protozoa_demultiplexed/seqs.fna -o 03.demultiplexed/protozoa_demultiplexed/split_samples
+
+#change to the directory that contains the split samples fasta files
+cd 03.demultiplexed/protozoa_demultiplexed/split_samples
+
+#loop over over sample while chicking for chimeras using usearch 61
+for file in $(ls ./) ; do
+identify_chimeric_seqs.py -m usearch61 -i $file -r /gpfs0/biores/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta -o usearch61_chimera_checking/
+cat usearch61_chimera_checking/chimeras.txt >> usearch61_chimera_checking/CHIMERA.txt
+done
+
+#remove chimeric sequences fom seqs.fna
+filter_fasta.py -s 03.demultiplexed/protozoa_demultiplexed/split_samples/usearch61_chimera_checking/CHIMERA.txt -f 03.demultiplexed/protozoa_demultiplexed/seqs.fna -o 03.demultiplexed/protozoa_demultiplexed/non_chimeric_seqs.fna -n
+
+#############################################################################################################################
+
+
+
+
+##############################################################################################
+#b.using Chimera Slayer
+#pick otu and get the representative sequences (rep_set)
+#note step 4 of the script below takes a long time to run don't be worried
+pick_open_reference_otus.py -i 03.demultiplexed/bacteria_demultiplexed/non_chimeric_seqs.fasta  -r /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_16S_only/97/97_otus_16S.fasta \
+-o 05.open_ref_otus/bac_open_ref_otus/ -p /fastspace/users/gilloro/Biyi/bacteria_parameters.txt  -m sortmerna_sumaclust -f
+
+#1. align the sequences using Pynast
+align_seqs.py -i rep_set.fna -t /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/core_alignment/core_alignment_SILVA128.fna -o $PWD/pynast_aligned_seqs
+
+#2. Identify the chimeras
+identify_chimeric_seqs.py -m ChimeraSlayer -i /gpfs0/biores/users/gilloro/Biyi/community_analysis/water/05.open_ref_otus/bac_open_ref_otus/pynast_aligned_seqs/rep_set_aligned.fasta -a /gpfs0/biores/users/gilloro/Biyi/SILVA_128_QIIME_release/core_alignment/core_alignment_SILVA128.fna -o /gpfs0/biores/users/gilloro/Biyi/community_analysis/water/05.open_ref_otus/bac_open_ref_otus/chimera_checking/chimeric_seqs.txt
+
+#3. remove the chimeric sequences from your alignment before tree building
+filter_fasta.py -f rep_set_aligned.fasta -o non_chimeric_rep_set_aligned.fasta -s chimeric_seqs.txt -n
+
+#filter the alignment
+filter_alignment.py -i non_chimeric_rep_set_aligned.fasta -o filtered_alignment/
+
+#make phylogenetic tree
+make_phylogeny.py -i filtered_alignment/aligned.fasta -o /gpfs0/biores/users/gilloro/Biyi/community_analysis/water/05.open_ref_otus/bac_open_ref_otus/rep_set.tre
+
+#assign taxonomy using rdp
+assign_taxonomy.py -o 05.open_ref_otus/bac_open_ref_otus/rpd_assigned_taxonomy -i 05.open_ref_otus/bac_open_ref_otus/rep_set.fna --confidence 0.5 --id_to_taxonomy_fp /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/taxonomy/16S_only/97/consensus_taxonomy_7_levels.txt --assignment_method rdp -r /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_16S_only/97/97_otus_16S.fasta --rdp_max_memory 50000
+
+#make non chimeric otu table
+make_otu_table.py -i 05.open_ref_otus/bac_open_ref_otus/final_otu_map_mc2.txt  -t 05.open_ref_otus/bac_open_ref_otus/rdp_assigned_taxonomy/rep_set_tax_assignments.txt -o 05.open_ref_otus/bac_open_ref_otus/otu_table_MC2.biom -m 00.mapping_file_validation/soil_bacteria_mapping_corrected.txt -e /gpfs0/biores/users/gilloro/Biyi/community_analysis/water/05.open_ref_otus/bac_open_ref_otus/chimera_checking/chimeric_seqs.txt
+
+#count the total reads after quality filtering
+count_seqs.py -i 03.demultiplexed/bacteria_demultiplexed/non_chimeric_seqs.fasta
+#count the number of sequences that belong to a particular sample in a concatenated and filtered seqs.fna file
+>grep -c ">SB.6_" 03.demultiplexed/bacteria_demultiplexed/non_chimeric_seqs.fasta
+
+#pick open reference otus
+#bacteria
+>pick_open_reference_otus.py -i 03.demultiplexed/bacteria_demultiplexed/non_chimeric_seqs.fasta  -r /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_16S_only/97/97_otus_16S.fasta \
+-o 05.open_ref_otus/bac_open_ref_otus/ -p /fastspace/users/gilloro/Biyi/bacteria_parameters.txt  -m sortmerna_sumaclust -f
+#protist
+pick_open_reference_otus.py -i 03.demultiplexed/protozoa_demultiplexed/non_chimeric_seqs.fasta -r /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta \
+-o 05.open_ref_otus/protist_open_ref_otus/ -p /fastspace/users/gilloro/Biyi/protozoa_parameters.txt -m sortmerna_sumaclust -f
+
+########################################################################################################
+#if open ref oTUs fails then assign taxonomy
+#bacteria
+assign_taxonomy.py -o 05.open_ref_otus/bac_open_ref_otus/uclust_assigned_taxonomy -i 05.open_ref_otus/bac_open_ref_otus/rep_set.fna --confidence 0.8 --id_to_taxonomy_fp /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/taxonomy/16S_only/97/consensus_taxonomy_7_levels.txt --assignment_method uclust -r /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_16S_only/97/97_otus_16S.fasta
+
+#make otu table
+make_otu_table.py -i 05.open_ref_otus/protist_open_ref_otus/combined/final_otu_map_mc2.txt  -t 05.open_ref_otus/protist_open_ref_otus/combined/rdp_assigned_taxonomy/rep_set_tax_assignments.txt  -o 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_MC2.biom -m 00.mapping_file_validation/combined/protozoa/corrected/soil_protozoa_mapping_corrected.txt
+
+#align_seq
+ align_seqs.py -i 05.open_ref_otus/bac_open_ref_otus/rep_set.fna  -t /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/core_alignment/core_alignment_SILVA128.fna -o 05.open_ref_otus/bac_open_ref_otus/pynast_aligned/
+
+#make phylogenetic tree
+make_phylogeny.py -i 05.open_ref_otus/bac_open_ref_otus/pynast_aligned/rep_set_aligned.fasta -o 05.open_ref_otus/bac_open_ref_otus/rep_set.tre
+
+#split otu table by taxonomy at the phylum level
+split_otu_table_by_taxonomy.py -i 06.de_novo_otus/otu_table.biom -L 2 -o 06.de_novo_otus/L2/ 
+
+
+#split OTU table by treatment
+split_otu_table.py -i 05.open_ref_otus/bac_open_ref_otus/barrier_exp/nonirr_barrier_otu_table.biom  -m 00.mapping_file_validation/barrier_exp/bacteria/corrected/nonirr_barrier_bacteria_mapping_corrected.txt  -f Treatment -o split_OTU_tables/bacteria/barrier_exp/treatments/
+
+#merge OTU table - here i merge one treatment "PW-P" with the non_irrigated treatment
+merge_otu_tables.py -i nonirr_barrier_otu_table__Treatment_UnIrrigated_clay__.biom,nonirr_barrier_otu_table__Treatment_PW-P__.biom -o time_zero_PW-P_otu_table.biom
+
+#merge mapping files - here i merge one treatment "PW-P" with the non_irrigated treatment
+merge_mapping_files.py -m  nonirr_barrier_bacteria_mapping_corrected__Treatment_UnIrrigated_clay__.txt,nonirr_barrier_bacteria_mapping_corrected__Treatment_PW-P__.txt -o time_zero_PW-P_mapping.txt -n 'NA'
+###########################################################################################
+
+
+
+#convert biom to tsv
+biom convert -i 05.open_ref_otus/bac_open_ref_otus/otu_table_MC2.biom -o 05.open_ref_otus/bac_open_ref_otus/otu_table_biom.txt --to-tsv --header-key taxonomy --output-metadata-id "Consensus Lineage"
+
+#summarizing the biom table
+biom summarize-table -i 05.open_ref_otus/bac_open_ref_otus/otu_table_MC2.biom -o 05.open_ref_otus/bac_open_ref_otus/otu_table.biom.summary
+
+#filter out the really rare otus "The recommended procedure is to discard those OTUs with a number of sequences less than 0.005% of the total number of sequences" (Navas-Molina et al, 2013)
+filter_otus_from_otu_table.py -i 05.open_ref_otus/bac_open_ref_otus/otu_table_MC2.biom -o 05.open_ref_otus/bac_open_ref_otus/otu_table_filtered.biom --min_count_fraction 0.00005
+
+
+#filter otutable for specific analysis by samples in a mapping files
+#protozoa in barrier experiment minus non irr
+filter_samples_from_otu_table.py -i 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_MC2.biom  -o 05.open_ref_otus/protist_open_ref_otus/barrier_exp/barrier_otu_table.biom --sample_id_fp 00.mapping_file_validation/barrier_exp/protozoa/corrected/barrier_protozoa_mapping_corrected.txt
+#filter out rare otus
+filter_otus_from_otu_table.py -i 05.open_ref_otus/bac_open_ref_otus/barrier_exp/barrier_otu_table.biom  -o 05.open_ref_otus/bac_open_ref_otus/barrier_exp/barrier_otu_table_filtered.biom --min_count_fraction 0.00005
+#summarize the otu.biom table in order to get information on the subsampling depth i.e the minimum count
+biom summarize-table -i 05.open_ref_otus/bac_open_ref_otus/barrier_exp/barrier_otu_table_filtered.biom  -o 05.open_ref_otus/bac_open_ref_otus/barrier_exp/barrier_otu_table_filtered.biom.summary
+
+###############################################################################################
+07.advanced/protist_diversity/soilType_exp/plus_nonirr/season1/protist_only_rare_OTU_diversity
+07.advanced/protist_diversity/soilType_exp/minus_nonirr/season2/protist_only_rare_OTU_diversity
+07.advanced/protist_diversity/barrier_exp/plus_nonirr/combined/protist_only_rare_OTU_diversity
+07.advanced/protist_diversity/barrier_exp/minus_nonirr/combined/protist_only_rare_OTU_diversity
+####### subset teh otu table to contain on fungi  #######################
+filter_taxa_from_otu_table.py -i 05.open_ref_otus/protist_open_ref_otus/otu_table_MC2.biom -o 10.new_otu_tables/fungi/fungi_otu_table.biom -p D_3__Fungi
+####################### remove plant and fungi to have only protist related OTUs ########################## 
+#get the plant taxa to be removed from Archaeplastida - in this line of code i try my best to all plant taxon names to be removed
+grep "Archaeplastida" eukayote_table.xlsx | awk -F"\tD_" '{print $2}' | sort -u | grep -vE "Zygnematales|Chlorophyceae|Trebouxiophyceae|Ulvophyceae|Chlamydomonadales|Chlorellales|Chlorodendrales|Prasiolales|Sphaeropleales|Trebouxiales|Ulotrichales|Chaetosphaeridiales|Tetrasporales|Klebsormidiophyceae|Coleochaetophyceae|Glaucophyta|Rhodophyta|Mesostigma|Chlorokybophyceae|Charophyceae" | awk -F" " '{print $5}' | sort -u > Archaeplastida_to_remove.txt
+
+#filter out fungi, Metazoa, uncultured and plant sequences
+filter_taxa_from_otu_table.py -i 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_MC2.biom -o 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist.biom -n D_3__Fungi,D_3__Metazoa\ \(Animalia\),D_10__Asterales,D_10__Brassicales,D_10__Caryophyllales,D_10__Cupressales,D_10__Fabales,D_10__Malpighiales,D_10__Malvales,D_10__Pinales,D_10__Rosales,D_10__Solanales,D_11__Arecales,D_11__Asparagales,D_11__Poales,D_4__Capsicum,D_4__Jatropha,D_6__Embryophyta,D_7__Bryophyta,D_7__Tracheophyta,D_8__Spermatophyta,D_3__uncultured
+####check if the filtering was sucessful
+#convert to a text file
+biom convert -i 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist.biom -o 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist_biom.txt --to-tsv --header-key taxonomy --output-metadata-id "Consensus Lineage"
+#look in the text file for the filtered taxa - the result should be a blank page meaning it was sucessful
+grep -E "Metazoa|Asterales|Brassicales|Caryophyllales|Cupressales|Fabales|Malpighiales|Malvales|Pinales|Rosales|Solanales|Arecales|Asparagales|Poales|Capsicum|Jatropha|Embryophyta|Bryophyta|Tracheophyta|Spermatophyta|Fungi|uncultured" 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist_biom.txt | sort -u | less -S  
+#summarize the biom table to find the number of sequences per sample
+biom summarize-table -i 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist.biom  -o 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist_biom.summary && less -S 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist_biom.summary
+
+
+############
+filter_taxa_from_otu_table.py -i 05.open_ref_otus/bac_open_ref_otus/combined/otu_table_MC2.biom -o 10.filtered_bac_OTU_Tables/otu_table_MC2.biom -n D_4__Mitochondria,D_2__Chloroplast,D_0__Archaea
+#remove rare otus
+filter_otus_from_otu_table.py -i 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist.biom -o 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom --min_count_fraction 0.00005
+#summarize biom table
+biom summarize-table -i 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom -o 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered_biom.summary
+#run core_diversity_analyses
+core_diversity_analyses.py -i 05.open_ref_otus/protist_open_ref_otus/05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom -o 06.diversity/protist/combined/rare_OTU_diversity --mapping_fp 00.mapping_file_validation/protozoa/corrected/altered_water_protist_mapping_corrected.txt --sampling_depth 1170 --parameter_fp /gpfs0/biores/users/gilloro/Biyi/water_protozoa_parameter.txt --tree_fp 05.open_ref_otus/protist_open_ref_otus/rep_set.tre --categories WaterType
+
+
+filter_otus_from_otu_table.py -i 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist.biom  \
+							  -o 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom \
+							  --min_count_fraction 0.00005 && biom summarize-table -i 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom \
+							  -o 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered_biom.summary && \
+							  less -S 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered_biom.summary
+
+							  
+
+########################### filter out sequences that belong to plants, animals and fungi from your 18S rRNA sequecing data - MY OLD APPROACH
+#1. convert biom table to txt
+biom convert -i otu_table_MC2.biom -o otu_table_MC2_biom.txt --to-tsv --header-key taxonomy --output-metadata-id "Consensus Lineage"
+#2. filter out the unwanted sequences
+grep -vE "Metazoa|Fungi|Archaeplastida" otu_table_MC2_biom.txt > protist_only_otu_table_MC2_biom.txt
+#3. rename the ConsensusLineage column taxonomy
+sed 's/Consensus Lineage/ConsensusLineage/' < protist_only_otu_table_MC2_biom.txt | sed 's/ConsensusLineage/taxonomy/' > protist_only_otu_table_MC2_biom.txt
+#4. convert the filtered txt table to biom hdf5 format and convert the taxonomy string from the classic OTU table to a taxonomy list, as it’s represented in QIIME 1.4.0-dev and later
+biom convert -i protist_only_otu_table_MC2_biom.txt -o protist_only_otu_table_MC2_biom --table-type="OTU table" --to-hdf5 --process-obs-metadata taxonomy
+#5.summarize biom table
+biom summarize-table -i 05.open_ref_otus/protist_open_ref_otus/combined/protist_only_otu_table_MC2_biom -o 05.open_ref_otus/protist_open_ref_otus/combined/protist_only_otu_table_MC2_biom.summary
+
+
+
+
+
+
+
+
+
+################# perform nmds on betadiversity distance matrix files
+#make the directory that will contain the output of the nmds analysis
+mkdir 11.new_diversity_analysis/bacteria/rare_OTU_diversity/bdiv_even23551/beta_div_nmds_results/
+#make direvtory that will contain all the distance matric files
+mkdir 11.new_diversity_analysis/bacteria/rare_OTU_diversity/bdiv_even23551/distance_matrix_files/
+#copy the distance matrix files to the newly created directory
+cp 11.new_diversity_analysis/bacteria/rare_OTU_diversity/bdiv_even23551/*_dm.txt 11.new_diversity_analysis/bacteria/rare_OTU_diversity/bdiv_even23551/distance_matrix_files/
+#perform the nmds analysis
+nmds.py -i 11.new_diversity_analysis/bacteria/rare_OTU_diversity/bdiv_even23551/distance_matrix_files/ -o 11.new_diversity_analysis/bacteria/rare_OTU_diversity/bdiv_even23551/beta_div_nmds_results/
+
+
+
+#running sourceTracker
+#make sure sourceTracker is added to your .Renviron by using the command below
+#you only need to do this once
+echo >> $HOME/.Renviron
+echo "SOURCETRACKER_PATH=$PWD" >> $HOME/.Renviron
+
+#run sourceTracker
+Rscript sourcetracker_for_qiime.r -i data/otus.txt -m data/metadata.txt -o sourcetracker_out
+
+
+
+#test different rarefaction depths
+#remove the folders if already created
+rm -rf 05.open_ref_otus/protist_open_ref_otus/combined/rarefied_otu_tables/
+rm -rf 05.open_ref_otus/protist_open_ref_otus/combined/adiv_observed_otus/
+rm -rf 05.open_ref_otus/protist_open_ref_otus/combined/collated_alpha/
+rm -rf 05.open_ref_otus/protist_open_ref_otus/combined/rarefaction_plots
+#perform multiple rarefaction
+multiple_rarefactions.py -i 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist.biom -m 100 -x 6000 -s 400 -o 05.open_ref_otus/protist_open_ref_otus/combined/rarefied_otu_tables/ --lineages_included &&
+#calculate the number of otus
+alpha_diversity.py -i 05.open_ref_otus/protist_open_ref_otus/combined/rarefied_otu_tables/ -m observed_otus -o 05.open_ref_otus/protist_open_ref_otus/combined/adiv_observed_otus/ &&
+#collate the diversity result
+collate_alpha.py -i 05.open_ref_otus/protist_open_ref_otus/combined/adiv_observed_otus/ -o 05.open_ref_otus/protist_open_ref_otus/combined/collated_alpha/ &&
+#make the rarefacion curves
+make_rarefaction_plots.py -i 05.open_ref_otus/protist_open_ref_otus/combined/collated_alpha/ -m 00.mapping_file_validation/combined/protozoa/corrected/short_mapping.txt -o 05.open_ref_otus/protist_open_ref_otus/combined/rarefaction_plots --generate_average_tables &
+
+
+#core diversity analysis
+core_diversity_analyses.py -i 05.open_ref_otus/bac_open_ref_otus/otu_table_filtered.biom -o bac_diversity/ --mapping_fp 00.mapping_file_validation/soil_bacteria_mapping_corrected.txt --sampling_depth 6744 --parameter_fp /fastspace/users/gilloro/Biyi/bacteria_parameters.txt --tree_fp 05.open_ref_otus/bac_open_ref_otus/rep_set.tre --categories Treatment,Plastic,WaterType,SoilType,Week
+
+
+#core_diversity
+core_diversity_analyses.py -i 05.open_ref_otus/protist_open_ref_otus/soilType_exp/soilType_otu_table_filtered.biom -o 07.advanced/protist_diversity/soilType_exp/minus_nonirr/rare_OTU_diversity --mapping_fp 00.mapping_file_validation/soilType_exp/protozoa/corrected/soilType_protozoa_mapping_corrected.txt  --sampling_depth 1037 --parameter_fp /gpfs0/biores/users/gilloro/Biyi/soil_protozoa_parameter.txt  --tree_fp 05.open_ref_otus/protist_open_ref_otus/combined/rep_set.tre   --categories Treatment,WaterType,SoilType,Week
+
+
+
+#generate 2d pcoa plots
+make_2d_plots.py -i 07.advanced/protist_diversity/barrier_exp/minus_nonirr/rare_OTU_diversity/bdiv_even1209/bray_curtis_pc.txt -m 00.mapping_file_validation/barrier_exp/protozoa/corrected/barrier_protozoa_mapping_corrected.txt  -o 07.advanced/protist_diversity/barrier_exp/minus_nonirr/rare_OTU_diversity/bdiv_even1209/bray_2d_plots/
+
+
+#calculate the share3d otus between samples in order to make a venn diagram
+shared_phylotypes.py -i 10.new_otu_tables/bacteria/bacteria_OTU_Tables/otu_table_MC2.biom  -o shared_otus.txt
+
+
+#run differential abundance using functions i wrote in R
+#make a directory to store the rarefied otutable that have not been converted to relative abundance
+mkdir 11.new_diversity_analysis/protists/soilType_exp/minus_nonirr/combined/500_filtered_rare_OTU_diversity/even_taxa_absolute/
+#unzip the rarefied OTU table
+gunzip ../soil/11.new_diversity_analysis/protists/soilType_exp/minus_nonirr/combined/500_filtered_rare_OTU_diversity/table_even511.biom.gz
+#get the rarefied OTU table for every taxa level which has not been normalized to relative abundance
+summarize_taxa.py -i 11.new_diversity_analysis/protists/soilType_exp/minus_nonirr/combined/500_filtered_rare_OTU_diversity/table_even511.biom  -a -o 11.new_diversity_analysis/protists/soilType_exp/minus_nonirr/combined/500_filtered_rare_OTU_diversity/even_taxa_absolute/
+#then run the script i wrote in R "" for differntial abundace testing
+
+#how to run sparCC on the cluster
+#######  this needs to run only once
+wget https://bitbucket.org/yonatanf/sparcc/get/05f4d3f31d77.zip
+mv 05f4d3f31d77.zip sparCC.zip
+unzip sparCC.zip
+mv yonatanf-sparcc-05f4d3f31d77/ sparCC/
+#################################################3
+#run the following command whenever you want to run sparCC
+#add QIIMe to the path variable, this is so that the python libraries
+#could be made available for sparCC to run
+set path= ( /fastspace/bioinfo_apps/qiime/usr/local/bin/ $path )
+#run sparCC
+sparCC/SparCC.py -h
+
+
+#get the names of samples and thier identifications with seqences less than a threshold. in this example sequences with less than 1000 reads
+#you will first need to summarize your otu.biom table using the comman biom-summarize
+#and you wll also nedd your mapping file specifying what samples belong to what treatment
+#!/usr/bin/env bash
+#get only the summary for the samples with less than your threshold here 1000
+#first, I opeed the "05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist_biom.summary" file with vi and then
+#set line numbers in the command mode by typing :set number 
+#from this I was able to identify the line numbers for the samples with less than 1000 reads since they are sorted according
+#to the number of sequences in ascending order   
+sed -e '1,15d' 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist_biom.summary -e '56,184d' | cut -d":" -f1 > samples.txt
+
+samples=$(cat samples.txt)
+echo $samples > samples.txt
+sample2=$(sed -e 's/ /|/g' samples.txt)
+grep -wE $sample2 00.mapping_file_validation/combined/protozoa/corrected/short_mapping.txt > less_than_100seqs_samples.txt
+awk 'BEGIN{print "SampleID\tTreatment\tSoilType"}{print}' less_than_100seqs_samples.txt > less_than_100seqs_samples2.txt 
+
+#get the name of the current shell
+$>echo $0
+
+
+#advanced statistics
+
+#differential abundance testing	using DESeq2 negative binomial
+	mkdir -p 08.Advanced/01.diffabund
+differential_abundance.py \
+    -i 06.de_novo_otus/otu_table_filtered.biom \
+    -o 08.Advanced/01.diffabund/DESeq2_output \
+    --algorithm  DESeq2_nbinom \
+    --mapping_file_path 00.mapping_file_validation/QIIME_mapping_corrected.txt \
+    --mapping_file_category Diet \
+    --mapping_file_subcategory_1 "Intact_yeast_diet" \
+    --mapping_file_subcategory_2 "Blue_mussel_diet" \
+    --DESeq2_diagnostic_plots
+
+#unzip the rarefied OTU.biom table	
+gunzip 07.diversity/table_even16059.biom.gz	
+
+#compare cummunities between samples here using anosim
+compare_categories.py \
+    --method anosim \
+    -i 07.diversity/bdiv_even16059/weighted_unifrac_dm.txt \
+    -m 00.mapping_file_validation/QIIME_mapping_corrected.txt \
+    -c Diet \
+    -o 08.Advanced/03.compare_categories/anosim_out
+
+#cluster analyses	
+	mkdir -p 08.Advanced/Clustering/
+upgma_cluster.py \
+    -i 07.diversity/bdiv_even16059/weighted_unifrac_dm.txt \
+    -o 08.Advanced/Clustering/weighted_unifrac_dm_UPGMA.txt
+	
+#make OTU heatmap	
+make_otu_heatmap.py \
+    -i 07.diversity/table_even16059.biom \
+    -o 08.Advanced/table_even16059.biom.heatmap.png \
+    -t 06.de_novo_otus/rep_set.tre \
+    -m 00.mapping_file_validation/QIIME_mapping_corrected.txt \
+    -s 08.Advanced/Clustering/weighted_unifrac_dm_UPGMA.txt \
+    -g png \
+    --dpi 300 \
+    --height 8
+	
+#UPGMA clustering and building jackknifed Emperor PCoA plots
+#To directly measure the robustness of individual UPGMA clusters and clusters in PCoA plots,
+#one can perform jackknifing (repeatedly resampling a subset of the available data from each sample).	
+jackknifed_beta_diversity.py \
+    -i 06.de_novo_otus/otu_table_filtered.biom \
+    -o 08.Advanced/02.jackknife \
+    -e 3000 \
+    -m 00.mapping_file_validation/QIIME_mapping_corrected.txt \
+    -t 06.de_novo_otus/rep_set.tre \
+    -p PRJNA351976/qiime_parameters.txt \
+    -f	
+
+make_emperor.py \
+    -i 08.Advanced/02.jackknife/weighted_unifrac/pcoa/ \
+    -o 08.Advanced/02.jackknife/weighted_unifrac/emperor \
+    -m 00.mapping_file_validation/QIIME_mapping_corrected.txt \
+    -t 07.diversity/taxa_plots/table_mc16059_sorted_L3.txt \
+    --color_by Diet
+	
+compare_distance_matrices.py \
+    --method mantel \
+    -i 07.diversity/bdiv_even16059/bray_curtis_dm.txt,07.diversity/bdiv_even16059/weighted_unifrac_dm.txt \
+    -o 08.Advanced/04.compare_DMs \
+    -n 999	
+	
+#Functional analysis stes using Picrust
+
+pick_closed_reference_otus.py        \
+    -o 05c.closed_OTU_picking        \
+    -i 04.demultiplexed/seqs.fna     \
+    -p PRJNA351976/qiime_parameters.txt        \
+    --reference_fp /usr/local/lib/python2.7/dist-packages/qiime_default_reference/gg_13_8_otus/rep_set/97_otus.fasta \
+    --force
+	
+normalize_by_copy_number.py \
+        -i 05c.closed_OTU_picking/otu_table.biom \
+        -o 08.Advanced/05.Functional_analysis/01.normalized_otus.biom	
+		
+######################### Procrust analysis  ############################################		
+#example on how to perform procrust analysis with QIIME- http://qiime.org/tutorials/procrustes_analysis.html
+#procust analysis is used to compare to ordination type to see if they produce similar results 
+
+#First, we’ll perform initial set up for the tutorial:
+wget ftp://ftp.microbio.me/qiime/tutorial_files/moving_pictures_tutorial-1.9.0.tgz
+tar -xzf moving_pictures_tutorial-1.9.0.tgz
+cd moving_pictures_tutorial-1.9.0
+
+#Next, we’ll run the Procrustes analysis on the weighted and unweighted UniFrac PCoA matrices:
+transform_coordinate_matrices.py -i illumina/precomputed-output/cdout/bdiv_even1114/unweighted_unifrac_pc.txt,illumina/precomputed-output/cdout/bdiv_even1114/weighted_unifrac_pc.txt -r 999 -o procrustes_results/
+
+#Finally, we’ll generate a Procrustes plot. This plot will include an explicit time axis because we’re passing --custom_axes DaysSinceExperimentStart,
+but this is not required (it helps with interpretation for this particular data set).
+
+make_emperor.py -c -i procrustes_results/ -o procrustes_results/plots/ -m illumina/map.tsv --custom_axes DaysSinceExperimentStart
+
+#There will now be several results of interest. For the Procrustes analysis you can find the statistical 
+#results in procrustes_results/procrustes_results.txt and you can view the Procrustes plot by opening procrustes_results/plots/index.html in a web browser.
+
+
+################ get sequencing and read statistis for publication #######################
+#extracxt the compressed files
+tar -xvf files/reads/soil_protozoa.tar.gz
+#unzip them
+gunzip files/protozoa/*
+#get the disk usage for all the sample reads both F and R
+du -h files/protozoa/ #get the disk usage for all the samples
+mkdir files/protozoa/combined
+mv files/protozoa/* files/protozoa/combined
+mkdir files/protozoa/soiltype_exp
+mkdir files/protozoa/barrier_exp
+cp files/protozoa/combined/* files/protozoa/soiltype_exp/
+bash
+source $HOME/.bashrc
+source get_samples2.sh
+#Provide the full path to your QIIME mapping file
+00.mapping_file_validation/barrier_exp/protozoa/corrected/barrier_protozoa_mapping_corrected.txt
+#which column number contains your samples
+1
+
+for i in ${samples[*]}; do mv files/protozoa/soiltype_exp/${i}__* files/protozoa/barrier_exp/;done
+#get the total size in terms of storage of the reads - barrier experiment
+du -h files/protozoa/barrier_exp/
+#get the total size in terms of storage of the reads - soil type experiment
+du -h files/protozoa/soiltype_exp/
+#get the total and individual samples read count
+count_seqs.py -i "files/protozoa/barrier_exp/*" -o barrier_seqs_count.txt
+
+
+#not necesaay - same as above
+#get the count of sequences per sample
+#for r in $(ls files/protozoa/barrier_exp/); do count_seqs.py -i files/protozoa/barrier_exp/$r >> barrier_seqs_count.txt; done

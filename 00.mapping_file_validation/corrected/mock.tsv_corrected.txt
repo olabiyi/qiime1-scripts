@@ -1,0 +1,5 @@
+#SampleID	BarcodeSequence	LinkerPrimerSequence	sample_number	batch	pcr_cycles	medium_or_plant	sterile_plant	grown_with_antibiotics	location	water_washed	surface_sterilization	b12_enriched 	treatment	Description
+M.1	BARCODE_PH	LINKER_PH	NA	B	NA	NA	NA	NA	NA	NA	NA	NA	MOCK	Mock_community
+M.2	BARCODE_PH	LINKER_PH	NA	B	NA	NA	NA	NA	NA	NA	NA	NA	MOCK	Mock_community
+M.3	BARCODE_PH	LINKER_PH	NA	B	NA	NA	NA	NA	NA	NA	NA	NA	MOCK-DreamTaq	Mock_community_Dream_taq_ready_mix_
+M.NC	BARCODE_PH	LINKER_PH	NA	B	NA	NA	NA	NA	NA	NA	NA	NA	MOCK-NegativeControl	Mock_community_negative_control

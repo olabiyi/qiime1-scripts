@@ -1,0 +1,225 @@
+##### RUNNING PROTIST COMMUNITY ANALYSIS WITH QIIME 1.9.1  ON A CLUSTER WITH QSUB INSTALLED - sequences were downloaded 
+#### to a windows 7 computer, pooled into one folder then analyzed on a Linux/UNIX omputer cluster
+# please note - $> means the Linux prompt ; R> means the R prompt ; cmd> means the Windows cmd.exe terminal
+# Also note that the paths specified here are arbituary, you should use the paths to the folders /files specific for your analysis
+
+# Author - Olabiyi Aderemi Obayomi
+# Date - 26 / 11 / 2018
+# Email - obadbotanist@yahoo.com
+
+# install miniconda
+# Begin by downloading Miniconda and following the associated installation instructions.
+# http://conda.pydata.org/miniconda.html
+
+## Install qiime 1.9.1 via conda
+conda create -n qiime1 python=2.7 qiime matplotlib mock nose fastqc pear multiqc -c bioconda
+
+########################## Getting things ready on the computer cluster ##################################################################
+#prepare your QIIME format friendly mapping and parameter files
+#for instructions on how to prepare these files see the link below:
+http://qiime.org/documentation/index.html
+
+###### download split_library_log_parser and install magrittr - for parsing the output of split_library_log (this step will be done only once)
+$>git clone https://github.com/bioinfo-core-BGU/split_library_log_parser.git
+# Install magrittr:
+$>sudo R
+# at the '>' prompt:
+R>install.packages("magrittr")
+# Exit the R session:
+R>q()
+####################################
+
+#download and unzip the latest version of the qiime compatible silva database from
+#the link https://www.arb-silva.de/download/archive/qiime/
+
+#install microbiome helper if you don't have it so that you can get the "run_pear.pl" script.
+#you will have to alter this script a little in order to set your desired thresholds for 
+#for joining your paired-end reads. for example set the following  -m 480 -n 300 -t 300 -q 20
+git clone https://github.com/LangilleLab/microbiome_helper.git
+
+#install perl's ForkManager if not already installed, run_pear.pl depends on it.
+cpan Parallel::ForkManager
+
+#if you downloaded or modified your script on Windows convert the format to UNIX format 
+dos2unix /fastspace/users/gilloro/Biyi/pathogen_analysis/run_pear.pl
+
+#set the PATH variable so that the programs can be available
+#fastQC
+set path =(/fastspace/users/gilloro/Biyi/FastQC/ $path) #on csh
+export PATH=/fastspace/users/gilloro/Biyi/FastQC/:$PATH #on bash
+#Qiime
+set path =(/fastspace/bioinfo_apps/qiime/usr/local/bin/ $path) #on csh
+export PATH=/fastspace/bioinfo_apps/qiime/usr/local/bin/:$PATH #on bash
+#PEAR
+set path =(/fastspace/users/gilloro/Biyi/pear-0.9.11-linux-x86_64/bin/ $path) #on csh
+export PATH=/fastspace/users/gilloro/Biyi/pear-0.9.11-linux-x86_64/bin/:$PATH #on bash
+#####################################################################################
+
+############################################################################################################################## 
+#After downloading your reads from basespace, move them to one folder on Windows
+
+######method 1 on cmd.exe
+###move the contents of the folders containing the reads into the parent directory using windows command prompt
+cmd>for /r C:\path %i in (*) do @move "%i" "C:\path"
+#next step is to delete the empty folders then copy or move the reads into a folder on the cluster 
+
+#####method 2
+#or move from the Moxterminal or GITBASH
+#afer you must have downloaded and installed mobaxTerm or GITBASH
+###change directory to the directory containing the sequences
+$>cd MyDocuments/programming/sequence_directory/
+###make a directory to store the reads/seqences together
+$>mkdir together
+#move the files to the 'together' diretory - 'ls -d */' lists all the directories in the current directory
+$>for dir in $(ls -d */); do if [ $dir == together/ ]; then continue; fi;   mv $dir* together/; done
+
+##############################################################################################################################
+
+############################# ANALYSIS PROPER #######################################################################################
+
+#Be organised by making directories for each step in the analysis for example
+mkdir 00.mapping_file_validation # for mapping file validation and so on
+
+
+ 
+###### 1. validate your qiime mapping file
+$>validate_mapping_file.py \
+	-m 00.mapping_file_validation/soilType_exp/soilType_protist_mapping.txt \
+	-o 00.mapping_file_validation/soilType_exp/
+
+
+###join reads using PEAR
+#make sure you go over the pear_summary_log file to see if your reads stitched properly
+#My reads didn't stitch well so I Ignored the reverse reads and ran the downstream ananlyses with the forward reads alone
+$>run_pear.pl -o stitched_reads files/*
+
+###clean the folder containing the assembeled reads
+$>rm -rf stitched_reads/*.unassembled* stitched_reads/*discarded*
+
+###quality testing with fastQC
+#make the fastQC script executable
+$>chmod +x Biyi/FastQC/fastqc  
+
+#quality check on joined reads
+$>fastqc --outdir 01.QC stitched_reads/
+
+#concatenate the joined sequences in one seqs.fna file - You can add the -w flag for debugging
+$>multiple_split_libraries_fastq.py \
+	-i stitched_reads/ -o 03.demultiplexed/protozoa_demultiplexed/ \
+	-p /fastspace/users/gilloro/Biyi/protozoa_parameters.txt
+
+#get the statistics for split libray log (OPTIONAL)
+#this step is optional but highly recommended
+$>Rscript /gpfs0/biores/users/gilloro/Biyi/split_library_log_parser/parse_split_library_log.R 
+	--input bacteria_demultiplexed/split_library_log.txt 
+	--output bacteria_demultiplexed/split_library_log.tsv
+
+#count all the sequences after split_labrary's quality filtering and concatenation (OPTIONAL)
+$>count.py -i seqs.fna 
+
+###################################################  remove chimeras script ###############################################
+#chimera checking with usearch61
+
+#split the seqs.fna file into per sample fna files - this step is necessary because usearch fails when you have a lot of samples
+split_sequence_file_on_sample_ids.py \
+	-i 03.demultiplexed/protozoa_demultiplexed/seqs.fna \
+	-o 03.demultiplexed/protozoa_demultiplexed/split_samples
+
+#change to the directory that contains the split samples fasta files
+cd 03.demultiplexed/protozoa_demultiplexed/split_samples
+
+#loop over each sample while chicking for chimeras using usearch 61
+for file in $(ls ./) ; do
+identify_chimeric_seqs.py \
+	-m usearch61 -i $file \
+	-r /gpfs0/biores/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta 
+	-o usearch61_chimera_checking/
+	
+cat usearch61_chimera_checking/chimeras.txt >> usearch61_chimera_checking/CHIMERA.txt
+done
+
+#remove chimeric sequences fom seqs.fna
+filter_fasta.py\
+	-s 03.demultiplexed/protozoa_demultiplexed/split_samples/usearch61_chimera_checking/CHIMERA.txt\
+	-f 03.demultiplexed/protozoa_demultiplexed/seqs.fna \
+	-o 03.demultiplexed/protozoa_demultiplexed/non_chimeric_seqs.fna \
+	-n
+
+#############################################################################################################################
+
+#count the total reads after quality filtering (OPTIONAL)
+$>count_seqs.py \
+	-i 03.demultiplexed/bacteria_demultiplexed/non_chimeric_seqs.fasta
+
+#pick open-reference OTUs using sortmerna and sumaclust algorithms, construct a phylogenetic tree and assign taxonomy
+$>pick_open_reference_otus.py \
+	-i 03.demultiplexed/protozoa_demultiplexed/non_chimeric_seqs.fasta 
+	-r /fastspace/users/gilloro/Biyi/SILVA_128_QIIME_release/rep_set/rep_set_18S_only/97/97_otus_18S.fasta \
+	-o 05.open_ref_otus/protist_open_ref_otus/ \
+	-p /fastspace/users/gilloro/Biyi/protozoa_parameters.txt \
+	-m sortmerna_sumaclust \
+	-f
+
+#Exclude fungi, Metazoa, uncultured and Flowering plants sequences
+$>filter_taxa_from_otu_table.py \
+	-i 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_MC2.biom \
+	-o 05.open_ref_otus/protist_open_ref_otus/combined/otu_table_only_protist.biom \
+	-n D_3__Fungi,D_3__Metazoa\ \(Animalia\),D_10__Asterales,D_10__Brassicales,D_10__Caryophyllales,D_10__Cupressales,D_10__Fabales,D_10__Malpighiales,D_10__Malvales,D_10__Pinales,D_10__Rosales,D_10__Solanales,D_11__Arecales,D_11__Asparagales,D_11__Poales,D_4__Capsicum,D_4__Jatropha,D_6__Embryophyta,D_7__Bryophyta,D_7__Tracheophyta,D_8__Spermatophyta,D_3__uncultured
+
+#filter-out rare otus (OPTIONAL)
+#filter-out the really rare otus "The recommended procedure is to discard those OTUs with a number of sequences less than 0.005% of the total number of sequences" (Navas-Molina et al, 2013)
+$>filter_otus_from_otu_table.py \
+	-i 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist.biom \
+	-o 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom \
+	--min_count_fraction 0.00005
+
+#summarize the biom table that you may know the number of sequences for rarefaction - it is usually the lowest number of sequences but this decision
+#is yours to make. I rarefied at 1000 sequences per sample but you can go higher or lower as you so please
+#always confirm if rarefaction was fine using rarefaction curves
+$>biom summarize-table \
+	-i 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom \
+	-o 05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered_biom.summary
+
+#run core_diversity_analyses - rarefaction, alpha and beta diversity analyses, visualizations and statistics
+$>core_diversity_analyses.py \
+	-i 05.open_ref_otus/protist_open_ref_otus/05.open_ref_otus/protist_open_ref_otus/otu_table_only_protist_filtered.biom \
+	-o 06.diversity/protist/combined/rare_OTU_diversity \
+	--mapping_fp 00.mapping_file_validation/protozoa/corrected/altered_water_protist_mapping_corrected.txt \
+	--sampling_depth 1170 \
+	--parameter_fp /gpfs0/biores/users/gilloro/Biyi/water_protozoa_parameter.txt \
+	--tree_fp 05.open_ref_otus/protist_open_ref_otus/rep_set.tre \
+	--categories WaterType
+
+
+#####Statistics with QIIME - though i performed mine in R because our QIIME installation wasn't perfect
+#if you need my R scripts I can send them too 
+
+#differential abundance testing	using DESeq2 negative binomial
+	mkdir -p 08.Advanced/01.diffabund
+$>differential_abundance.py \
+    -i 06.de_novo_otus/otu_table_filtered.biom \
+    -o 08.Advanced/01.diffabund/DESeq2_output \
+    --algorithm  DESeq2_nbinom \
+    --mapping_file_path 00.mapping_file_validation/QIIME_mapping_corrected.txt \
+    --mapping_file_category Diet \
+    --mapping_file_subcategory_1 "Intact_yeast_diet" \
+    --mapping_file_subcategory_2 "Blue_mussel_diet" \
+    --DESeq2_diagnostic_plots
+
+#unzip the rarefied OTU.biom table	
+$>gunzip 07.diversity/table_even16059.biom.gz	
+
+#compare cummunities between samples here using anosim
+$>compare_categories.py \
+    --method anosim \
+    -i 07.diversity/bdiv_even16059/weighted_unifrac_dm.txt \
+    -m 00.mapping_file_validation/QIIME_mapping_corrected.txt \
+    -c Diet \
+    -o 08.Advanced/03.compare_categories/anosim_out
+	
+#compare distance matrics for correlations
+$>compare_distance_matrices.py \
+    --method mantel \
+    -i 07.diversity/bdiv_even16059/bray_curtis_dm.txt,07.diversity/bdiv_even16059/weighted_unifrac_dm.txt \
+    -o 08.Advanced/04.compare_DMs \
+    -n 999		
