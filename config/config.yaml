@@ -1,0 +1,70 @@
+mapping_file: "00.mapping/metadata.tsv"
+parameter_file: "00.mapping/parameter_file.txt"
+mail: "obadbotanist@yahoo.com" # A mere label
+database: "/home/jeffbrady/biyi/qiime1-scripts/create_DB/SILVA_132_QIIME_release/rep_set/rep_set_16S_only/97/silva_132_97_16S.fna"
+otu_picking_method: "sortmerna_sumaclust"
+taxa2filter: "D_4__Mitochondria,D_2__Chloroplast" # for 16S
+amplicon: "16S" # 16S or 18S or ITS
+#taxa2filter: "D_3__Fungi,D_3__Metazoa\ \(Animalia\),D_10__Asterales,D_10__Brassicales,D_10__Caryophyllales,D_10__Cupressales,D_10__Fabales,D_10__Malpighiales,D_10__Malvales,D_10__Pinales,D_10__Rosales,D_10__Solanales,D_11__Arecales,D_11__Asparagales,D_11__Poales,D_4__Capsicum,D_4__Jatropha,D_6__Embryophyta,D_7__Bryophyta,D_7__Tracheophyta,D_8__Spermatophyta,D_3__uncultured" # for 18S
+#Pathogen_list: "/home/jeffbrady/biyi/16s_pathogen_analysis/human_bacteria_pathogens_list.txt"
+Pathogen_list: "/home/jeffbrady/biyi/16s_pathogen_analysis/silva_human_bacteria_pathogens.txt"
+
+samples: ["N1R1NT1", "N1R1NT2", "N1R1NT3", "N1R1NT4", "N1R1NT5", "N1R1NT6", "N1R1NT7", "N1R1NT8", "N1R1NT9", "N1R1NT10",
+          "N1R1NT11", "N1R1NT12", "N1R1NT13", "N1R1NT14", "N1R1NT15", "N1R1NT16", "N1R1NT17", "N1R1NT18", "N1R1NT19", 
+          "N1R1NT20", "N1R1NT21", "N1R1NT22", "N1R1NT23", "N1R1NT24", "N1R1T1", "N1R1T2", "N1R1T3", "N1R1T4", "N1R1T5", 
+          "N1R1T6", "N1R1T7", "N1R1T8", "N1R1T9", "N1R1T10", "N1R1T11", "N1R1T12", "N1R1T13", "N1R1T14", "N1R1T15", 
+          "N1R1T16", "N1R1T17", "N1R1T18", "N1R1T19", "N1R1T20", "N1R1T21", "N1R1T22", "N1R1T23", "N1R1T24", "N3R2T1", 
+          "N3R2T2", "N3R2T3", "N3R2T4", "N3R2T5", "N3R2T6", "N3R2T7", "N3R2T8", "N3R2T9", "N3R2T10", "N3R2T11", "N3R2T12", 
+          "N3R2T13", "N3R2T14", "N3R2T15", "N3R2T16", "N3R2T17", "N3R2T18", "N3R2T19", "N3R2T20", "N3R2T21", "N3R2T22", 
+          "N3R2T23", "N3R2T24", "S1R1NT1", "S1R1NT2", "S1R1NT3", "S1R1NT4", "S1R1NT5", "S1R1NT6", "S1R1NT7", "S1R1NT8", 
+          "S1R1NT9", "S1R1NT10", "S1R1NT11", "S1R1NT12", "S1R1NT13", "S1R1NT14", "S1R1NT15", "S1R1NT16", "S1R1NT17", 
+          "S1R1NT18", "S1R1NT19", "S1R1NT20", "S1R1NT21", "S1R1NT22", "S1R1NT23", "S1R1NT24", "S1R1T1", "S1R1T2", "S1R1T3", 
+          "S1R1T4", "S1R1T5", "S1R1T6", "S1R1T7", "S1R1T8", "S1R1T9", "S1R1T10", "S1R1T11", "S1R1T12", "S1R1T13", "S1R1T14", 
+          "S1R1T15", "S1R1T16", "S1R1T17", "S1R1T18", "S1R1T19", "S1R1T20", "S1R1T21", "S1R1T22", "S1R1T23", "S1R1T24", 
+          "S1R2NT1", "S1R2NT2", "S1R2NT3", "S1R2NT4", "S1R2NT5", "S1R2NT6", "S1R2NT7", "S1R2NT8", "S1R2NT9", "S1R2NT10", 
+          "S1R2NT11", "S1R2NT12", "S1R2NT13", "S1R2NT14", "S1R2NT15", "S1R2NT16", "S1R2NT17", "S1R2NT18", "S1R2NT19", 
+          "S1R2NT20", "S1R2NT21", "S1R2NT22", "S1R2NT24", "S1R2T1", "S1R2T2", "S1R2T3", "S1R2T4", "S1R2T5", 
+          "S1R2T6", "S1R2T7", "S1R2T8", "S1R2T9", "S1R2T10", "S1R2T11", "S1R2T12", "S1R2T13", "S1R2T14", "S1R2T15", "S1R2T16", 
+          "S1R2T17", "S1R2T18", "S1R2T19", "S1R2T20", "S1R2T21", "S1R2T22", "S1R2T23", "S1R2T24", "S1R3NT1", "S1R3NT2", "S1R3NT3", 
+          "S1R3NT4", "S1R3NT5", "S1R3NT6", "S1R3NT7", "S1R3NT8", "S1R3NT9", "S1R3NT10", "S1R3NT11", "S1R3NT12", "S1R3NT13", 
+          "S1R3NT14", "S1R3NT15", "S1R3NT16", "S1R3NT17", "S1R3NT18", "S1R3NT19", "S1R3NT20", "S1R3NT21", "S1R3NT22", "S1R3NT23", 
+          "S1R3NT24", "S1R3T1", "S1R3T2", "S1R3T3", "S1R3T4", "S1R3T5", "S1R3T6", "S1R3T7", "S1R3T8", "S1R3T9", "S1R3T10", "S1R3T11", 
+          "S1R3T12", "S1R3T13", "S1R3T14", "S1R3T15", "S1R3T16", "S1R3T17", "S1R3T18", "S1R3T19", "S1R3T20", "S1R3T21", "S1R3T22", "S1R3T23", "S1R3T24"]
+ # List your sample names here - see the README.md file for an easy way to create this list
+project_dir: "/home/jeffbrady/biyi/qiime1-scripts"
+
+containers:
+    qiime:  "/home/jeffbrady/singularity_images/qiime1_v1.9.sif" # "/home/jeffbrady/singularity_images/qiime1.9_v1.sif"
+    fastqc: "/home/jeffbrady/singularity_images/trim_galore_0.6.7.sif"
+    multiqc: "/home/jeffbrady/singularity_images/multiqc_v1.14.sif"
+    pear: "/home/jeffbrady/singularity_images/pear_0.9.6--h67092d7_8.sif"
+    seqkit: "/home/jeffbrady/singularity_images/seqkit_2.4.0--h9ee0642_0.sif"
+    trimmomatic: "/home/jeffbrady/anaconda3/envs/bioinfo" #"/home/jeffbrady/singularity_images/trimmomatic_v0.38dfsg-1-deb_cv1.sif"
+    cutadapt: "/home/jeffbrady/singularity_images/trim_galore_0.6.7.sif"
+    trim_galore: "/home/jeffbrady/singularity_images/trim_galore_0.6.7.sif"
+    qiime_conda: "/home/jeffbrady/anaconda3/envs/python2/"
+    qiime_stan: "/home/jeffbrady/singularity_images/qiime1_amplicon_latest.sif"
+    picrust2: "set +u; source activate /home/jeffbrady/miniconda3/envs/picrust2; set -u"
+    bioinfo: "set +u; source activate /home/jeffbrady/anaconda3/envs/bioinfo; set -u"
+
+parameters:
+    pear:
+        min_assembly: 50
+        max_assembly: 360
+        min_trim: 150
+        threads: 5
+    trimmomatic: 
+        adaptors: "/home/jeffbrady/anaconda3/envs/bioinfo/share/trimmomatic-0.39-1/adapters/Nextera_andTruseqPE-PE.fa" #"NexteraPE-PE.fa"
+        min_len: 20
+    cutadapt:
+        forward_primer: "TCGGCCATTCCATACATTGGT"
+        reverse_primer: "GGAGGGGTGGATAAGGGGT"  
+        minimum_length: 20 # retain only reads with length greater than this after quality filtering
+        quality_cutoff: 20,20 # trim base with bases with quailty less than 20 from the 5', and 3' regions
+    filter_rare:
+        minimum_frequency: 0.00005 # Frequency to filter out rare otus
+
+    core_diversity:
+        depth: 515 # Rarefaction depth
+        category: "Treatment" # Which column in the mapping file should comparisons be performed on
+
